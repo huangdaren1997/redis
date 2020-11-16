@@ -42,8 +42,40 @@ extern const char *SDS_NOINIT;
 
 typedef char *sds;
 
-/* Note: sdshdr5 is never used, we just access the flags byte directly.
- * However is here to document the layout of type 5 SDS strings. */
+/*
+ * Note: sdshdr5 is never used, we just access the flags byte directly.
+ * However is here to document the layout of type 5 SDS strings.
+ *
+ * 二进制安全字符串：存的是什么，拿出来的就是什么
+ * 在C语言中，\0表示字符串结束，如果一个字符串包含 \0 ,那么后面的内容会被截取
+ * 为了实现二进制安全字符串，需要记录下这个字符串的长度
+ *
+ * 为了更好的利用内存，redis会根据字符串的长度，选择适当的整数类型来记录字符串的长度
+ *
+ */
+
+/**
+ * __attribute__ ((__packed__)) 是做什么的？
+ *
+ * 我们知道，通常定义一个U32 ，CPU 期望 这个 U32 地址是 DW 对齐的, 这样对CPU访问 mem bus 比较友好。
+ * 所以，当我们定义这样一个结构体：
+ * struct test{
+ *  char i;
+ *  uint32 a;
+ * }
+ * 那么，编译器会默认在 i 和 a 之间插入 reserve，确保 a 的位置是 4 对齐的。
+ * sizeof(test) = 8
+ *
+ * 加入  “__attribute__ ((__packed__))” 的效果，则在于避免编译器 “自作聪明”。 告诉编译器，我们这里不需要补全。
+ * struct __attribute__ ((__packed__)) test{
+ *  char i;
+ *  uint32 a;
+ * }
+ * sizeof(test) = 5
+ *
+ * 更多关于结构体中内存对齐问题:https://www.sohu.com/a/301439559_468739
+ *
+ */
 struct __attribute__ ((__packed__)) sdshdr5 {
     unsigned char flags; /* 3 lsb of type, and 5 msb of string length */
     char buf[];
@@ -73,13 +105,13 @@ struct __attribute__ ((__packed__)) sdshdr64 {
     char buf[];
 };
 
-#define SDS_TYPE_5  0
-#define SDS_TYPE_8  1
-#define SDS_TYPE_16 2
-#define SDS_TYPE_32 3
-#define SDS_TYPE_64 4
-#define SDS_TYPE_MASK 7
-#define SDS_TYPE_BITS 3
+#define SDS_TYPE_5  0           // 0000_0000
+#define SDS_TYPE_8  1           // 0000_0001
+#define SDS_TYPE_16 2           // 0000_0010
+#define SDS_TYPE_32 3           // 0000_0011
+#define SDS_TYPE_64 4           // 0000_0100
+#define SDS_TYPE_MASK 7         // 0000_0111
+#define SDS_TYPE_BITS 3         // 3位标记位
 #define SDS_HDR_VAR(T,s) struct sdshdr##T *sh = (void*)((s)-(sizeof(struct sdshdr##T)));
 #define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
 #define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
